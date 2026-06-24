@@ -1,6 +1,6 @@
 resource "aws_security_group" "this" {
-  name        = "${var.customer}-${var.environment}-sg"
-  description = "Security group for ${var.customer} ${var.environment}"
+  name        = "${var.customer_name}-${var.environment}-sg"
+  description = "Security group for ${var.customer_name} ${var.environment}"
   vpc_id      = var.vpc_id
 
   ingress {

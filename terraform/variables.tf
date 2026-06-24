@@ -4,12 +4,12 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "customer" {
-  description = "Customer name (lowercase alphanumeric, used as DNS prefix)"
+variable "customer_name" {
+  description = "Customer name (lowercase alphanumeric with hyphens, used as DNS prefix and resource naming)"
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z0-9-]+$", var.customer))
+    condition     = can(regex("^[a-z0-9-]+$", var.customer_name))
     error_message = "Customer name must be lowercase alphanumeric with hyphens."
   }
 }
@@ -25,7 +25,7 @@ variable "environment" {
 }
 
 variable "root_domain" {
-  description = "Root DNS domain (e.g. demo.example.com). A Route53 hosted zone must exist for this domain."
+  description = "Root DNS domain (e.g. demo.example.com). A Route53 hosted zone must exist for this domain when create_dns_resources is true."
   type        = string
 }
 
@@ -35,7 +35,7 @@ variable "availability_zone" {
 }
 
 variable "create_dns_resources" {
-  description = "Create Route53, ACM, and HTTPS resources. Set false for local testing without a real domain."
+  description = "Create Route53, ACM, and HTTPS resources. Set false for testing without a real domain."
   type        = bool
   default     = true
 }
@@ -50,4 +50,11 @@ variable "ssh_cidr_blocks" {
   description = "CIDR blocks allowed for SSH access"
   type        = list(string)
   default     = ["0.0.0.0/0"]
+}
+
+variable "db_password" {
+  description = "PostgreSQL password. If empty, a random password is generated during bootstrap."
+  type        = string
+  default     = ""
+  sensitive   = true
 }

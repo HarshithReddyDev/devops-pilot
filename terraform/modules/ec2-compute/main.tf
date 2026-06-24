@@ -26,7 +26,7 @@ data "aws_ami" "amazon_linux_2023" {
 # --- IAM ---
 
 resource "aws_iam_role" "this" {
-  name = "${var.customer}-${var.environment}-ec2-role"
+  name = "${var.customer_name}-${var.environment}-ec2-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -50,7 +50,7 @@ resource "aws_iam_role_policy_attachment" "ssm" {
 }
 
 resource "aws_iam_role_policy" "ebs_manage" {
-  name = "${var.customer}-${var.environment}-ebs-manage"
+  name = "${var.customer_name}-${var.environment}-ebs-manage"
   role = aws_iam_role.this.id
 
   policy = jsonencode({
@@ -90,7 +90,7 @@ resource "aws_iam_role_policy" "ebs_manage" {
 }
 
 resource "aws_iam_instance_profile" "this" {
-  name = "${var.customer}-${var.environment}-instance-profile"
+  name = "${var.customer_name}-${var.environment}-instance-profile"
   role = aws_iam_role.this.name
 
   tags = var.tags
@@ -105,7 +105,7 @@ resource "aws_ebs_volume" "data" {
   encrypted         = true
 
   tags = merge(var.tags, {
-    Name     = "${var.customer}-${var.environment}-data"
+    Name     = "${var.customer_name}-${var.environment}-data"
     Snapshot = "true"
   })
 }
@@ -146,7 +146,7 @@ resource "aws_instance" "this" {
   monitoring = true
 
   tags = merge(var.tags, {
-    Name = "${var.customer}-${var.environment}-app"
+    Name = "${var.customer_name}-${var.environment}-app"
   })
 
   depends_on = [aws_iam_role_policy.ebs_manage]
@@ -162,11 +162,12 @@ data "aws_caller_identity" "current" {}
 
 locals {
   user_data = templatefile("${path.module}/templates/user_data.sh", {
-    customer        = var.customer
+    customer_name   = var.customer_name
     environment     = var.environment
     ebs_device_name = var.ebs_device_name
     ebs_mount_point = var.ebs_mount_point
     app_port        = var.app_port
     customer_domain = var.customer_domain
+    db_password     = var.db_password != "" ? var.db_password : ""
   })
 }

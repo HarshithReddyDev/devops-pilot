@@ -1,5 +1,20 @@
+output "customer_name" {
+  description = "Customer name used for this deployment"
+  value       = var.customer_name
+}
+
+output "environment" {
+  description = "Deployment environment (staging/production)"
+  value       = var.environment
+}
+
+output "customer_url" {
+  description = "Customer-facing URL"
+  value       = var.create_dns_resources ? "https://${local.customer_domain}" : "http://${aws_lb.this.dns_name}"
+}
+
 output "website_url" {
-  description = "Customer website URL"
+  description = "Legacy alias for customer_url"
   value       = var.create_dns_resources ? "https://${local.customer_domain}" : "http://${aws_lb.this.dns_name}"
 }
 
@@ -86,4 +101,9 @@ output "availability_zone" {
 output "ami_id" {
   description = "AMI ID used"
   value       = module.compute.ami_id
+}
+
+output "alb_target_group_arn" {
+  description = "ALB target group ARN"
+  value       = aws_lb_target_group.this.arn
 }

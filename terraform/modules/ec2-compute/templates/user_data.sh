@@ -1,14 +1,14 @@
 #!/bin/bash
 # DevOps Pilot - Bootstrap Script
-# Provisions Docker, mounts EBS, starts container stack
 set -euo pipefail
 
-CUSTOMER="${customer}"
+CUSTOMER="${customer_name}"
 ENVIRONMENT="${environment}"
 EBS_DEVICE="${ebs_device_name}"
 EBS_MOUNT="${ebs_mount_point}"
 APP_PORT="${app_port}"
 CUSTOMER_DOMAIN="${customer_domain}"
+DB_PASSWORD="${db_password}"
 
 BOOTSTRAP_LOG="/var/log/bootstrap.log"
 COMPOSE_DIR="$EBS_MOUNT/app"
@@ -21,7 +21,11 @@ echo "[bootstrap] Starting deployment for $CUSTOMER / $ENVIRONMENT"
 echo "[bootstrap] Domain: $CUSTOMER_DOMAIN"
 echo "[bootstrap] EBS device: $EBS_DEVICE mount: $EBS_MOUNT"
 
-# --- Utility ---
+if [ -z "$DB_PASSWORD" ]; then
+  DB_PASSWORD=$(openssl rand -base64 24)
+  echo "[bootstrap] Generated random database password"
+fi
+
 retry() {
   local n=0 max=5 delay=10
   until "$@"; do
@@ -35,13 +39,11 @@ retry() {
   done
 }
 
-# --- 1. Install Docker ---
 echo "[bootstrap] Installing Docker..."
 retry yum install -y docker
 systemctl enable --now docker
 usermod -aG docker ec2-user
 
-# --- 2. Install Docker Compose v2 ---
 echo "[bootstrap] Installing Docker Compose v2..."
 mkdir -p /usr/local/lib/docker/cli-plugins
 COMPOSE_VERSION="v2.32.0"
@@ -52,7 +54,6 @@ chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 ln -sf /usr/local/lib/docker/cli-plugins/docker-compose /usr/bin/docker-compose
 docker compose version
 
-# --- 3. Format and mount EBS ---
 echo "[bootstrap] Preparing EBS volume $EBS_DEVICE..."
 if [ -b "$EBS_DEVICE" ]; then
   if ! blkid "$EBS_DEVICE" > /dev/null 2>&1; then
@@ -78,20 +79,18 @@ else
   echo "[bootstrap] WARNING: $EBS_DEVICE not found. EBS may not be attached yet."
 fi
 
-# --- 4. Create directories ---
 mkdir -p "$COMPOSE_DIR" "$PG_DATA_DIR" "$BACKEND_DATA_DIR"
 
-# --- 5. Write docker-compose.yml ---
 echo "[bootstrap] Writing docker-compose.yml..."
 cat > "$COMPOSE_DIR/docker-compose.yml" << COMPOSE_EOF
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: ${customer}-${environment}-postgres
+    container_name: ${customer_name}-${environment}-postgres
     restart: always
     environment:
       POSTGRES_USER: app_user
-      POSTGRES_PASSWORD: changeme_in_production
+      POSTGRES_PASSWORD: $DB_PASSWORD
       POSTGRES_DB: app_db
     volumes:
       - $PG_DATA_DIR:/var/lib/postgresql/data
@@ -110,7 +109,7 @@ services:
 
   backend:
     image: nginx:alpine
-    container_name: ${customer}-${environment}-backend
+    container_name: ${customer_name}-${environment}-backend
     restart: always
     ports:
       - "${app_port}:80"
@@ -130,7 +129,7 @@ services:
 
   frontend:
     image: nginx:alpine
-    container_name: ${customer}-${environment}-frontend
+    container_name: ${customer_name}-${environment}-frontend
     restart: always
     ports:
       - "80:80"
@@ -151,7 +150,6 @@ networks:
     driver: bridge
 COMPOSE_EOF
 
-# --- 6. Write nginx configs ---
 echo "[bootstrap] Writing nginx configs..."
 
 cat > "$COMPOSE_DIR/backend.conf" << 'NGINX_CONF'
@@ -163,7 +161,7 @@ server {
 
     location / {
         try_files $uri $uri/ =404;
-        add_header X-Backend "${customer}-${environment}" always;
+        add_header X-Backend "${customer_name}-${environment}" always;
     }
 
     location /health {
@@ -199,9 +197,7 @@ server {
 }
 NGINX_CONF
 
-# --- 7. Validate nginx configs ---
 echo "[bootstrap] Validating nginx configs..."
-# Validate backend config (no upstream/proxy_pass, no DNS dependency)
 if docker run --rm -v "$COMPOSE_DIR/backend.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine nginx -t > /dev/null 2>&1; then
     echo "[bootstrap] Backend nginx config: VALID"
 else
@@ -209,7 +205,6 @@ else
     docker run --rm -v "$COMPOSE_DIR/backend.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine nginx -t
     exit 1
 fi
-# Validate frontend config (substitute unresolvable backend hostname with 127.0.0.1 for DNS-free syntax check)
 sed -e 's|proxy_pass http://backend:\([0-9]*\)/|proxy_pass http://127.0.0.1:\1/|' \
     "$COMPOSE_DIR/frontend.conf" > /tmp/frontend-validate.conf
 if docker run --rm -v /tmp/frontend-validate.conf:/etc/nginx/conf.d/default.conf:ro nginx:alpine nginx -t > /dev/null 2>&1; then
@@ -222,8 +217,7 @@ else
     exit 1
 fi
 
-# --- 8. Write index files ---
-echo "{ \"customer\": \"${customer}\", \"environment\": \"${environment}\", \"status\": \"healthy\" }" > "$BACKEND_DATA_DIR/index.html"
+echo "{ \"customer\": \"${customer_name}\", \"environment\": \"${environment}\", \"status\": \"healthy\" }" > "$BACKEND_DATA_DIR/index.html"
 
 cat > "$COMPOSE_DIR/index.html" << HTML_EOF
 <!DOCTYPE html>
@@ -231,7 +225,7 @@ cat > "$COMPOSE_DIR/index.html" << HTML_EOF
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${customer} - ${environment}</title>
+  <title>${customer_name} - ${environment}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -251,7 +245,7 @@ cat > "$COMPOSE_DIR/index.html" << HTML_EOF
 <body>
   <div class="card">
     <div class="badge">${environment}</div>
-    <h1>Welcome, ${customer}</h1>
+    <h1>Welcome, ${customer_name}</h1>
     <p>Your application is running.</p>
     <p class="info"><a href="https://${customer_domain}">${customer_domain}</a></p>
   </div>
@@ -259,17 +253,14 @@ cat > "$COMPOSE_DIR/index.html" << HTML_EOF
 </html>
 HTML_EOF
 
-# --- 9. Start containers ---
 echo "[bootstrap] Starting Docker Compose stack..."
 cd "$COMPOSE_DIR"
 docker compose up -d
 
-# --- 10. Verify containers ---
 echo "[bootstrap] Verifying containers..."
 sleep 5
 docker compose ps
 
-# --- 11. Test endpoints ---
 echo "[bootstrap] Testing frontend (port 80)..."
 if curl -sf http://localhost:80/health > /dev/null 2>&1; then
   echo "[bootstrap] Frontend: OK"
@@ -286,3 +277,4 @@ fi
 
 echo "[bootstrap] Bootstrap complete for $CUSTOMER / $ENVIRONMENT"
 echo "[bootstrap] URL: https://$CUSTOMER_DOMAIN"
+echo "[bootstrap] DB password: $DB_PASSWORD"

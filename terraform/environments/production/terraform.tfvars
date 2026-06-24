@@ -1,4 +1,3 @@
-customer             = "changeme"
 environment          = "production"
 root_domain          = "demo.example.com"
 availability_zone    = "us-east-1a"

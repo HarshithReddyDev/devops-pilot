@@ -1,4 +1,4 @@
-variable "customer" {
+variable "customer_name" {
   type = string
 }
 
@@ -57,6 +57,13 @@ variable "ebs_mount_point" {
 variable "app_port" {
   type    = number
   default = 8080
+}
+
+variable "db_password" {
+  description = "PostgreSQL password. Empty string generates a random password during bootstrap."
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "tags" {
