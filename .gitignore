@@ -1,0 +1,69 @@
+# --- Terraform ---
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfstate.d/
+terraform/*.tfvars
+!terraform/environments/**/*.tfvars
+*.tfplan
+crash.log
+
+# --- Python / Streamlit ---
+**/__pycache__/
+**/.streamlit/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# --- Docker ---
+docker/.env
+
+# --- macOS ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- Linux ---
+*.swp
+*.swo
+*~
+.nfs*
+
+# --- Windows ---
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# --- IDE ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
+# --- Secrets ---
+*.pem
+*.key
+*.cert
+secrets/
+.aws/
+
+# --- OS artifacts ---
+*.log
+tmp/
+temp/
