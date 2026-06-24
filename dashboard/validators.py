@@ -1,4 +1,6 @@
 import re
+import subprocess
+import os
 
 
 def validate_customer_name(name):
@@ -45,9 +47,7 @@ def validate_availability_zone(az):
         return False, "Availability zone is required."
     az = az.strip()
     if not re.match(r"^[a-z]{2}-[a-z]+-[0-9][a-z]$", az):
-        return False, (
-            "Availability zone must be in format like 'us-east-1a'."
-        )
+        return False, "Availability zone must be in format like 'us-east-1a'."
     return True, az
 
 
@@ -56,3 +56,51 @@ def validate_environment(env):
     if env not in valid:
         return False, f"Environment must be one of: {', '.join(valid)}"
     return True, env
+
+
+def check_aws_credentials():
+    try:
+        import boto3
+        sts = boto3.client("sts")
+        identity = sts.get_caller_identity()
+        return {
+            "status": "configured",
+            "account_id": identity["Account"],
+            "arn": identity["Arn"],
+            "region": boto3.session.Session().region_name or "us-east-1",
+        }
+    except Exception as e:
+        return {"status": "missing", "error": str(e)}
+
+
+def check_terraform_version():
+    try:
+        result = subprocess.run(
+            ["terraform", "version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            first_line = result.stdout.strip().split("\n")[0]
+            return {"status": "installed", "version": first_line}
+        return {"status": "error", "detail": result.stderr}
+    except FileNotFoundError:
+        return {"status": "missing", "detail": "terraform not found in PATH"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+def has_route53_zone(domain, region="us-east-1"):
+    try:
+        import boto3
+        client = boto3.client("route53", region_name=region)
+        paginator = client.get_paginator("list_hosted_zones")
+        for page in paginator.paginate():
+            for zone in page["HostedZones"]:
+                if zone["Name"].rstrip(".") == domain.rstrip(".") or \
+                   domain.rstrip(".").endswith("." + zone["Name"].rstrip(".")):
+                    return True, zone["Id"]
+        return False, None
+    except Exception:
+        return False, None
